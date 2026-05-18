@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upgrade to Pro</title>
+    <meta charset="UTF-8">
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Arial;
+            background: linear-gradient(135deg, #1f1f2e, #343541);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .card {
+            background: #202123;
+            border-radius: 16px;
+            padding: 30px;
+            width: 350px;
+            text-align: center;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+        }
+
+        h2 { margin-bottom: 10px; }
+
+        .price {
+            font-size: 32px;
+            color: #10a37f;
+            margin: 10px 0;
+        }
+
+        .features {
+            text-align: left;
+            margin: 20px 0;
+        }
+
+        .features li {
+            margin: 8px 0;
+            list-style: none;
+        }
+
+        .features li::before {
+            content: "✔ ";
+            color: #10a37f;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(45deg, #10a37f, #0e8c6d);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .back {
+            margin-top: 15px;
+            display: block;
+            color: #aaa;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <h2>🚀 Upgrade to PRO</h2>
+    <div class="price">₹500</div>
+
+    <ul class="features">
+        <li>Unlimited Chat Access</li>
+        <li>Faster AI Responses</li>
+        <li>No Rate Limits</li>
+        <li>Priority Support</li>
+    </ul>
+
+    <!-- ✅ FIXED BUTTON -->
+    <button onclick="handleUpgrade()">Upgrade Now</button>
+
+    <a class="back" href="/chat.html">← Back to Chat</a>
+
+</div>
+
+<script>
+
+function getToken() {
+    return localStorage.getItem("token");
+}
+
+// ✅ SMART UPGRADE LOGIC
+function handleUpgrade() {
+
+    const token = getToken();
+
+    // Guest
+    if (!token) {
+        alert("Please register first");
+        window.location.href = "/register.html";
+        return;
+    }
+
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const role = payload.role;
+
+    // PRO user
+    if (role === "PRO") {
+        alert("You are already PRO 🚀");
+        return;
+    }
+
+    // Normal user → proceed payment
+    pay();
+}
+
+// EXISTING PAYMENT FUNCTION (UNCHANGED)
+async function pay() {
+
+    try {
+
+        const res = await fetch("/api/payment/create-order", {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + getToken()
+            }
+        });
+
+        const order = await res.json();
+
+        const options = {
+            key: "rzp_test_xxxxx",
+            amount: order.amount,
+            currency: order.currency,
+            name: "NeuroChat",
+            description: "Pro Upgrade",
+            order_id: order.id,
+
+            handler: async function (response) {
+
+                await fetch("/api/payment/verify-payment", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + getToken()
+                    },
+                    body: JSON.stringify(response)
+                });
+
+                alert("🎉 Payment successful!");
+
+                localStorage.removeItem("token");
+                window.location.href = "/login.html";
+            }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+
+    } catch (err) {
+        alert("Payment failed");
+    }
+}
+
+</script>
+
+</body>
+</html>

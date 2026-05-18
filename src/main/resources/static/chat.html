@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NeuroChat</title>
+    <meta charset="UTF-8">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            background: #343541;
+            color: white;
+            display: flex;
+        }
+
+        .sidebar {
+            width: 260px;
+            background: #202123;
+            height: 100vh;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .sidebar button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #10a37f;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+
+        .chat-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-item {
+            padding: 8px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .chat-item:hover {
+            background: #2a2b32;
+        }
+
+        .chat-item.active {
+            background: #343541;
+        }
+
+        .delete-btn {
+            opacity: 0;
+            padding: 5px;
+            cursor: pointer;
+            color: #888;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+
+        .chat-wrapper:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .delete-btn:hover {
+            color: red;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            padding: 10px;
+            background: #40414f;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 120px);
+        }
+
+        .msg {
+            padding: 14px;
+            border-radius: 14px;
+            margin: 10px 0;
+            max-width: 65%;
+            word-wrap: break-word;
+        }
+
+        .user {
+            background: #10a37f;
+            margin-left: auto;
+        }
+
+        .bot {
+            background: #444654;
+        }
+
+        .input-area {
+            display: flex;
+            padding: 10px;
+            background: #40414f;
+            position: sticky;
+            bottom: 0;
+        }
+
+        input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            background: #40414f;
+            color: white;
+            outline: none;
+        }
+
+        button.send {
+            background: #10a37f;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="sidebar">
+    <button onclick="newChat()">+ New Chat</button>
+    <button onclick="upgrade()">Upgrade</button>
+    <div id="chatList"></div>
+</div>
+
+<div class="chat-container">
+
+    <div class="header">
+        <div style="margin-right: auto; padding-left: 10px; font-weight: bold;">
+            NeuroChat
+        </div>
+
+        <a href="https://github.com/Adityaraj2066" target="_blank"
+           style="color: white; text-decoration: none; margin-right: 15px;">
+            GitHub
+        </a>
+
+        <div id="authButtons"></div>
+    </div>
+
+    <div id="messages" class="messages"></div>
+
+    <div class="input-area">
+        <input id="input" placeholder="Type message..."
+               onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="send" onclick="sendMessage()">Send</button>
+    </div>
+
+</div>
+
+<script>
+
+let chatId = Date.now().toString();
+
+function getToken() {
+    return localStorage.getItem("token");
+}
+
+function getHeaders() {
+    const token = getToken();
+    return token ? { "Authorization": "Bearer " + token } : {};
+}
+
+function renderAuth() {
+    const div = document.getElementById("authButtons");
+
+    if (getToken()) {
+        div.innerHTML = `<button onclick="logout()">Logout</button>`;
+    } else {
+        div.innerHTML = `
+            <button onclick="window.location.href='/login.html'">Login</button>
+            <button onclick="window.location.href='/register.html'">Register</button>
+        `;
+    }
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    location.reload();
+}
+
+//
+// ✅ FIXED UPGRADE FUNCTION
+//
+function upgrade() {
+
+    const token = getToken();
+
+    // 👤 Guest → register
+    if (!token) {
+        window.location.href = "/register.html";
+        return;
+    }
+
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const role = payload.role;
+
+        // 👑 PRO
+        if (role === "PRO") {
+            alert("You are already a PRO user 🚀");
+            return;
+        }
+
+        // 👤 USER → payment
+        window.location.href = "/upgrade.html";
+
+    } catch (e) {
+        console.log("Token error:", e);
+        localStorage.removeItem("token");
+        window.location.href = "/register.html";
+    }
+}
+
+function newChat() {
+    chatId = Date.now().toString();
+    document.getElementById("messages").innerHTML = "";
+}
+
+function addMessage(text, role) {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    div.innerText = text;
+
+    document.getElementById("messages").appendChild(div);
+    scrollToBottom();
+}
+
+function scrollToBottom() {
+    const container = document.getElementById("messages");
+    container.scrollTop = container.scrollHeight;
+}
+
+async function loadChat(id) {
+    chatId = id;
+    document.getElementById("messages").innerHTML = "";
+
+    const res = await fetch(`/api/chat/history/${id}`, {
+        headers: getHeaders()
+    });
+
+    const messages = await res.json();
+
+    messages.forEach(msg => {
+        addMessage(msg.content, msg.role);
+    });
+}
+
+async function loadChats() {
+    const res = await fetch("/api/chat/chat-titles", {
+        headers: getHeaders()
+    });
+
+    const chats = await res.json();
+
+    const list = document.getElementById("chatList");
+    list.innerHTML = "";
+
+    chats.forEach(chat => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "chat-wrapper";
+
+        const div = document.createElement("div");
+        div.className = "chat-item";
+
+        div.innerText = chat.title 
+            ? chat.title.substring(0, 25)
+            : "New Chat";
+
+        div.onclick = () => loadChat(chat.chatId);
+
+        const del = document.createElement("span");
+        del.className = "delete-btn";
+        del.innerHTML = "&times;";
+
+        del.onclick = async (e) => {
+            e.stopPropagation();
+
+            await fetch(`/api/chat/delete/${chat.chatId}`, {
+                method: "DELETE",
+                headers: getHeaders()
+            });
+
+            loadChats();
+        };
+
+        wrapper.appendChild(div);
+        wrapper.appendChild(del);
+
+        list.appendChild(wrapper);
+    });
+}
+
+//
+// ✅ FIXED SEND MESSAGE (REDIS HANDLING)
+//
+async function sendMessage() {
+
+    const input = document.getElementById("input");
+    const msg = input.value.trim();
+
+    if (!msg) return;
+
+    addMessage(msg, "user");
+    input.value = "";
+
+    const botDiv = document.createElement("div");
+    botDiv.className = "msg bot";
+    document.getElementById("messages").appendChild(botDiv);
+
+    const res = await fetch(
+        `/api/chat/stream?chatId=${chatId}&message=${encodeURIComponent(msg)}`,
+        { headers: getHeaders() }
+    );
+
+    if (!res.ok) {
+
+        const text = await res.text();
+
+        try {
+            const data = JSON.parse(text);
+
+            if (data.type === "GUEST") {
+                window.location.href = "/register.html";
+                return;
+            }
+
+            if (data.type === "PAYMENT") {
+                window.location.href = "/upgrade.html";
+                return;
+            }
+
+        } catch (e) {
+            console.log("Error:", text);
+        }
+
+        return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    let fullText = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        fullText += decoder.decode(value);
+        botDiv.innerText = fullText + "▌";
+        scrollToBottom();
+    }
+
+    botDiv.innerText = fullText;
+
+    loadChats();
+}
+
+renderAuth();
+loadChats();
+
+</script>
+
+</body>
+</html>
